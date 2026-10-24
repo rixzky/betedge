@@ -1,0 +1,10 @@
+artifacts/
+__pycache__/
+*.pyc
+.env
+node_modules/
+# app/frontend/dist/  # kept: pre-built for demo, Node not required
+*.egg-info/
+.pytest_cache/
+*.parquet
+*.zip

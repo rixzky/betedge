@@ -1,0 +1,28 @@
+{
+  "match_id": "E0_2024-25_20241009_elmfield_alder-fc",
+  "closing_quote": {
+    "quote_id": "Q002482",
+    "bookmaker": "B365",
+    "snapshot": "CLOSING",
+    "observed_at_utc": "2024-10-09T14:00:00Z",
+    "timestamp_precision": "WINDOW",
+    "source": "SYNTHETIC",
+    "odds": [
+      1.43,
+      4.91,
+      6.72
+    ]
+  },
+  "closing_fair_probs": [
+    0.664876,
+    0.19364,
+    0.141484
+  ],
+  "result": {
+    "home_goals": 0,
+    "away_goals": 0,
+    "result": "D"
+  },
+  "clv": null,
+  "settled_pnl": null
+}
