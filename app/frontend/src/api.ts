@@ -6,6 +6,14 @@ import type {
 import { USE_MOCKS } from "./config";
 import type { EvidenceX, Overrides, ReplayPolicy, ReplayX, RevealX } from "./types";
 
+export type BetSummary = {
+  match_id: string; league: string; season: string; kickoff_utc: string;
+  home_team: string; away_team: string; split: string | null; has_closing: boolean;
+  selection: "H" | "D" | "A"; model_p: number | null; market_q: number | null;
+  ev_stressed: number | null; odds_offered: number | null; bookmaker: string | null;
+  action: "BET" | "NO_BET";
+};
+
 const mocks = import.meta.glob("../../../contract/golden/api/*.json", { import: "default" });
 
 export class ApiError extends Error {
@@ -48,6 +56,36 @@ export const api = {
   efficiencyMap: () => (USE_MOCKS ? mock<EfficiencyMap>("efficiency_map") : call<EfficiencyMap>("/api/efficiency-map")),
   fixtures: (league?: string, season?: string) =>
     USE_MOCKS ? mock<Fixture[]>("fixtures") : call<Fixture[]>(`/api/fixtures${qs({ league, season })}`),
+  bets: async (league?: string, season?: string): Promise<BetSummary[]> => {
+    if (USE_MOCKS) {
+      const [fixtures, r] = await Promise.all([mock<Fixture[]>("fixtures"), mock<ReplayX>("replay")]);
+      const rows = r.per_outcome ?? [];
+      if (!rows.length) return [];
+      const sel = r.decision.selection as "H" | "D" | "A" | null;
+      const chosen = (sel && rows.find((x) => x.outcome === sel)) ??
+        rows.reduce((best, cur) => ((cur.ev_stressed ?? -1e9) > (best.ev_stressed ?? -1e9) ? cur : best), rows[0]);
+      // Add deterministic variation so each fixture shows a different edge in demo mode
+      const hash = (s: string) => {
+        let h = 0; for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+        return h;
+      };
+      return fixtures.map((f) => {
+        const n = (hash(f.match_id) % 2000) / 10000; // -0.1..+0.1
+        return {
+          match_id: f.match_id, league: f.league, season: f.season, kickoff_utc: f.kickoff_utc,
+          home_team: f.home_team, away_team: f.away_team, split: f.split, has_closing: f.has_closing,
+          selection: chosen.outcome,
+          model_p: Math.min(0.98, Math.max(0.02, (chosen.p_model ?? 0.5) + n)),
+          market_q: chosen.q_market ?? null,
+          ev_stressed: (chosen.ev_stressed ?? 0) + n,
+          odds_offered: chosen.odds_offered ?? null,
+          bookmaker: chosen.bookmaker ?? null,
+          action: r.decision.action as "BET" | "NO_BET",
+        };
+      }).sort((a, b) => (b.ev_stressed ?? -1e9) - (a.ev_stressed ?? -1e9));
+    }
+    return call<BetSummary[]>(`/api/bets${qs({ league, season })}`);
+  },
   replay: (matchId: string, modelId?: string, o?: Overrides, policyId: ReplayPolicy = "controlled") =>
     USE_MOCKS
       ? mock<ReplayX>("replay")

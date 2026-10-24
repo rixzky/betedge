@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -33,6 +34,12 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _warm_caches() -> None:
+    """Precompute /api/bets payloads in a background thread so the first request is instant."""
+    threading.Thread(target=P.warm_bets_cache, name="warm-bets-cache", daemon=True).start()
 
 
 @app.exception_handler(P.AppError)
@@ -62,6 +69,11 @@ def efficiency_map():
 @app.get("/api/fixtures")
 def fixtures(league: Optional[str] = None, season: Optional[str] = None):
     return P.build_fixtures(league, season)
+
+
+@app.get("/api/bets")
+def bets(league: Optional[str] = None, season: Optional[str] = None):
+    return P.build_bets(league, season)
 
 
 PolicyQ = Query(None, description="controlled (Bet365 prices, default) or controlled_best_price")

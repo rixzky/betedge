@@ -28,3 +28,5 @@ export type EvidenceX = Evidence & {
 };
 
 export type Overrides = { prob_stress_delta?: number; price_haircut?: number; min_ev?: number };
+
+export type Mode = "normal" | "advanced";

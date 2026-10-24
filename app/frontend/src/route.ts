@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-export type Screen = "home" | "map" | "replay" | "evidence" | "audit";
-const SCREENS: Screen[] = ["home", "map", "replay", "evidence", "audit"];
+export type Screen = "home" | "bets" | "map" | "replay" | "evidence" | "audit";
+const SCREENS: Screen[] = ["home", "bets", "map", "replay", "evidence", "audit"];
 
 export interface Route { screen: Screen; params: URLSearchParams }
 

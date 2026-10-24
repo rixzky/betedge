@@ -366,6 +366,145 @@ def build_fixtures(league: Optional[str], season: Optional[str]) -> list[dict]:
     ]
 
 
+_BETS_CACHE: dict[tuple, list[dict]] = {}
+
+
+def _compute_bets(league: Optional[str], season: Optional[str]) -> list[dict]:
+    """Vectorised bet summary: join matches + predictions + market_probs + quotes once,
+    then pick the outcome with the largest edge (p_model - q_market). ~1s for ~400 matches,
+    vs minutes if we were to call build_replay per fixture.
+    """
+    matches = files.table("matches")
+    predictions = files.table("predictions")
+    market_probs = files.table("market_probs")
+    quotes = files.table("quotes")
+    if matches is None or predictions is None or market_probs is None:
+        return []
+
+    m = matches
+    if league:
+        m = m[m["league"] == league]
+    if season:
+        m = m[m["season"] == season]
+    if not files.is_holdout_locked():
+        m = m[m["season"] != files.holdout_season()]
+    if m.empty:
+        return []
+    match_ids = set(m["match_id"])
+
+    # Default model from frozen_config or MODEL_PREFERENCE
+    fc = files.frozen_config() or {}
+    default_model = fc.get("model_id")
+    if not default_model or default_model not in set(predictions["model_id"].unique()):
+        have = set(predictions["model_id"].unique())
+        default_model = next((x for x in MODEL_PREFERENCE if x in have), None)
+    if not default_model:
+        return []
+
+    preds = predictions[(predictions["model_id"] == default_model)
+                        & (predictions["match_id"].isin(match_ids))]
+    mp_pre = market_probs[(market_probs["match_id"].isin(match_ids))
+                          & (market_probs["snapshot"] == "PRE_CLOSING")
+                          & (market_probs["bookmaker"] == REFERENCE_BOOKMAKER)]
+    closing_set: set[str] = set()
+    if market_probs is not None:
+        closing_set = set(market_probs.loc[(market_probs["snapshot"] == "CLOSING")
+                                           & (market_probs["bookmaker"] == REFERENCE_BOOKMAKER),
+                                           "match_id"])
+
+    q_pre = pd.DataFrame()
+    if quotes is not None:
+        q_pre = quotes[(quotes["match_id"].isin(match_ids))
+                       & (quotes["snapshot"] == "PRE_CLOSING")
+                       & (quotes["bookmaker"] == REFERENCE_BOOKMAKER)]
+        if not q_pre.empty:
+            q_pre = q_pre.sort_values("observed_at_utc", ascending=False).drop_duplicates(
+                subset="match_id", keep="first",
+            )[["match_id", "odds_home", "odds_draw", "odds_away"]]
+
+    df = m[["match_id", "league", "season", "kickoff_utc", "home_team", "away_team"]].copy()
+    df = df.merge(preds[["match_id", "p_home", "p_draw", "p_away"]], on="match_id", how="left")
+    df = df.merge(mp_pre[["match_id", "q_home", "q_draw", "q_away"]], on="match_id", how="left")
+    if not q_pre.empty:
+        df = df.merge(q_pre, on="match_id", how="left")
+    else:
+        df["odds_home"] = np.nan
+        df["odds_draw"] = np.nan
+        df["odds_away"] = np.nan
+
+    df = df.dropna(subset=["p_home", "p_draw", "p_away", "q_home", "q_draw", "q_away"])
+    if df.empty:
+        return []
+
+    splits = files.splits_by_season()
+    outcomes = ("H", "D", "A")
+    p_cols = ["p_home", "p_draw", "p_away"]
+    q_cols = ["q_home", "q_draw", "q_away"]
+    o_cols = ["odds_home", "odds_draw", "odds_away"]
+    p_arr = df[p_cols].to_numpy(dtype=float)
+    q_arr = df[q_cols].to_numpy(dtype=float)
+    o_arr = df[o_cols].to_numpy(dtype=float)
+    edges = p_arr - q_arr
+    best_idx = edges.argmax(axis=1)
+
+    bets: list[dict] = []
+    for i, row in enumerate(df.itertuples(index=False)):
+        k = int(best_idx[i])
+        p_sel = float(p_arr[i, k])
+        q_sel = float(q_arr[i, k])
+        odds_sel = o_arr[i, k]
+        if np.isnan(odds_sel):
+            ev_sel = p_sel - q_sel  # fall back to pp edge if odds missing
+        else:
+            ev_sel = p_sel * float(odds_sel) - 1.0
+        bets.append({
+            "match_id": row.match_id,
+            "league": row.league,
+            "season": row.season,
+            "kickoff_utc": iso(row.kickoff_utc),
+            "home_team": row.home_team,
+            "away_team": row.away_team,
+            "split": splits.get(row.season),
+            "has_closing": row.match_id in closing_set,
+            "selection": outcomes[k],
+            "model_p": num(p_sel, 6),
+            "market_q": num(q_sel, 6),
+            "ev_stressed": num(ev_sel, 6),
+            "odds_offered": None if np.isnan(odds_sel) else num(float(odds_sel), 4),
+            "bookmaker": REFERENCE_BOOKMAKER,
+            "action": "BET" if ev_sel > 0 else "NO_BET",
+        })
+    bets.sort(key=lambda b: b["ev_stressed"] if b["ev_stressed"] is not None else -1e9, reverse=True)
+    return bets
+
+
+def build_bets(league: Optional[str], season: Optional[str]) -> list[dict]:
+    """Compact summary for every fixture, cached in-process per (league, season) pair."""
+    key = (league, season)
+    hit = _BETS_CACHE.get(key)
+    if hit is not None:
+        return hit
+    bets = _compute_bets(league, season)
+    _BETS_CACHE[key] = bets
+    return bets
+
+
+def warm_bets_cache() -> None:
+    """Precompute bets for every league x season combination (called in a background thread)."""
+    try:
+        meta = build_meta()
+    except Exception:
+        return
+    for lg in meta.get("leagues") or []:
+        for ss in meta.get("seasons") or []:
+            if (lg, ss) in _BETS_CACHE:
+                continue
+            try:
+                _BETS_CACHE[(lg, ss)] = _compute_bets(lg, ss)
+            except Exception:
+                _BETS_CACHE[(lg, ss)] = []
+
+
 def build_replay(match_id: str, model_id: Optional[str] = None, overrides: Optional[dict] = None,
                  policy_id: Optional[str] = None) -> dict:
     policy_id = check_policy_id(policy_id)

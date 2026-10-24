@@ -7,9 +7,9 @@ import { Empty, ErrorBox, Field, Loading, Notes, Panel, ScreenHead, Seg } from "
 import { HOLDOUT_SEASON, LEAGUE_LABEL, MODEL_LABEL, OUTCOME_LABEL, USE_MOCKS } from "../config";
 import { day, fix, odds, pct, sfix, spct, sunits, units, when } from "../format";
 import { setParams } from "../route";
-import type { Overrides, ReplayPolicy, ReplayX, RevealX } from "../types";
+import type { Mode, Overrides, ReplayPolicy, ReplayX, RevealX } from "../types";
 
-export function ReplayScreen({ meta, params }: { meta: Meta; params: URLSearchParams }) {
+export function ReplayScreen({ meta, params, mode: viewMode = "advanced" }: { meta: Meta; params: URLSearchParams; mode?: Mode }) {
   const mode = params.get("mode") === "scenarios" ? "scenarios" : "match";
   const seasons = meta.seasons.filter((s) => meta.holdout_locked || s !== HOLDOUT_SEASON);
   const league = params.get("league") ?? (meta.leagues.includes("E0") ? "E0" : meta.leagues[0]) ?? "";
@@ -26,12 +26,14 @@ export function ReplayScreen({ meta, params }: { meta: Meta; params: URLSearchPa
         kicker="02 · Match replay"
         title={mode === "match" ? "Would we have bet?" : "Demonstration scenarios"}
         lede={mode === "match"
-          ? "Replay one fixture as of the pre-closing quote: our probability against the market's, the price we would actually get, and every check between a forecast and a paper bet."
+          ? (viewMode === "normal"
+            ? "Pick a match and see our forecast — did the bookmaker get the odds wrong?"
+            : "Replay one fixture as of the pre-closing quote: our probability against the market's, the price we would actually get, and every check between a forecast and a paper bet.")
           : "Three constructed inputs that show how the rules behave. They are not historical findings."}
-        right={
+        right={viewMode === "advanced" ? (
           <Seg label="Replay mode" value={mode} onChange={(m) => update({ mode: m })}
             options={[{ value: "match", label: "Historical match" }, { value: "scenarios", label: "Demo scenarios" }]} />
-        }
+        ) : undefined}
         tone={mode === "scenarios" ? "amber" : undefined}
       />
       {mode === "match" && <div className="price-toolbar">
@@ -46,7 +48,7 @@ export function ReplayScreen({ meta, params }: { meta: Meta; params: URLSearchPa
         <div className="replay-layout">
           <MatchPicker meta={meta} seasons={seasons} league={league} season={season} matchId={matchId}
             model={model} onChange={update} />
-          {matchId ? <MatchReplay key={matchId + model + policy} matchId={matchId} model={model || undefined} policy={policy} meta={meta} />
+          {matchId ? <MatchReplay key={matchId + model + policy} matchId={matchId} model={model || undefined} policy={policy} meta={meta} viewMode={viewMode} />
             : <Empty>Pick a fixture on the left.</Empty>}
         </div>
       ) : (
@@ -118,7 +120,7 @@ function MatchPicker(props: {
   );
 }
 
-function MatchReplay({ matchId, model, policy, meta }: { matchId: string; model?: string; policy: ReplayPolicy; meta: Meta }) {
+function MatchReplay({ matchId, model, policy, meta, viewMode = "advanced" }: { matchId: string; model?: string; policy: ReplayPolicy; meta: Meta; viewMode?: Mode }) {
   const locked = useApi<ReplayX>(() => api.replay(matchId, model, undefined, policy), [matchId, model, policy]);
   const [sl, setSl] = useState<Required<Overrides> | null>(null);
   const [overrides, setOverrides] = useState<Overrides | null>(null);
@@ -191,7 +193,7 @@ function MatchReplay({ matchId, model, policy, meta }: { matchId: string; model?
           <dl className="kv" style={{ gridTemplateColumns: "auto auto", fontSize: 13 }}>
             <dt>Information cutoff</dt><dd className="mono">{when(r.information_cutoff_utc)}</dd>
             <dt>Model</dt><dd className="mono">{r.model ? `${r.model.model_id} · ${r.model.model_version}` : "n/a"}</dd>
-            <dt>Config hash</dt><dd className="mono">{r.config_hash}</dd>
+            {viewMode === "advanced" && <><dt>Config hash</dt><dd className="mono">{r.config_hash}</dd></>}
           </dl>
         </div>
       </Panel>
@@ -251,34 +253,38 @@ function MatchReplay({ matchId, model, policy, meta }: { matchId: string; model?
         </Panel>
 
         <div className="grid" style={{ alignContent: "start" }}>
-          <QuoteCard quote={r.offered_quote} cutoff={r.information_cutoff_utc} valid={r.x_quote_is_valid} />
-          <Panel title="Stress the edge" sub="Exploratory what-ifs through the shared decision function" tone="amber">
-            {USE_MOCKS ? (
-              <div className="note amber">Sliders need the backend: mock mode cannot rerun the decision function.</div>
-            ) : sl ? (
-              <div style={{ display: "grid", gap: 12 }}>
-                <Slider id="sl-d" label="Probability stress δ" hint="sensitivity assumption (not a confidence interval)"
-                  value={sl.prob_stress_delta} min={0} max={0.1} step={0.005} fmt={(v) => `${(v * 100).toFixed(1)} pp`}
-                  onChange={(v) => setSl({ ...sl, prob_stress_delta: v })} />
-                <Slider id="sl-h" label="Price haircut" hint="O′ = 1 + (O − 1)(1 − h): a worse fill than quoted"
-                  value={sl.price_haircut} min={0} max={0.1} step={0.005} fmt={(v) => `${(v * 100).toFixed(1)}%`}
-                  onChange={(v) => setSl({ ...sl, price_haircut: v })} />
-                <Slider id="sl-m" label="Minimum EV" hint="per unit staked, at the adjusted odds"
-                  value={sl.min_ev} min={0} max={0.1} step={0.005} fmt={(v) => spct(v)}
-                  onChange={(v) => setSl({ ...sl, min_ev: v })} />
-                {explore.loading && overrides && <Loading what="exploratory decision" />}
-                {explore.error && <ErrorBox error={explore.error} />}
-              </div>
-            ) : <Loading what="policy" />}
-          </Panel>
-          <Panel title="What drove the model" sub={r.model ? `${MODEL_LABEL[r.model.model_id] ?? r.model.model_id} · per-match contributions` : undefined}>
-            <TopFeatures rows={r.top_features} />
-          </Panel>
+          <QuoteCard quote={r.offered_quote} cutoff={r.information_cutoff_utc} valid={r.x_quote_is_valid} viewMode={viewMode} />
+          {viewMode === "advanced" && (
+            <Panel title="Stress the edge" sub="Exploratory what-ifs through the shared decision function" tone="amber">
+              {USE_MOCKS ? (
+                <div className="note amber">Sliders need the backend: mock mode cannot rerun the decision function.</div>
+              ) : sl ? (
+                <div style={{ display: "grid", gap: 12 }}>
+                  <Slider id="sl-d" label="Probability stress δ" hint="sensitivity assumption (not a confidence interval)"
+                    value={sl.prob_stress_delta} min={0} max={0.1} step={0.005} fmt={(v) => `${(v * 100).toFixed(1)} pp`}
+                    onChange={(v) => setSl({ ...sl, prob_stress_delta: v })} />
+                  <Slider id="sl-h" label="Price haircut" hint="O′ = 1 + (O − 1)(1 − h): a worse fill than quoted"
+                    value={sl.price_haircut} min={0} max={0.1} step={0.005} fmt={(v) => `${(v * 100).toFixed(1)}%`}
+                    onChange={(v) => setSl({ ...sl, price_haircut: v })} />
+                  <Slider id="sl-m" label="Minimum EV" hint="per unit staked, at the adjusted odds"
+                    value={sl.min_ev} min={0} max={0.1} step={0.005} fmt={(v) => spct(v)}
+                    onChange={(v) => setSl({ ...sl, min_ev: v })} />
+                  {explore.loading && overrides && <Loading what="exploratory decision" />}
+                  {explore.error && <ErrorBox error={explore.error} />}
+                </div>
+              ) : <Loading what="policy" />}
+            </Panel>
+          )}
+          {viewMode === "advanced" && (
+            <Panel title="What drove the model" sub={r.model ? `${MODEL_LABEL[r.model.model_id] ?? r.model.model_id} · per-match contributions` : undefined}>
+              <TopFeatures rows={r.top_features} />
+            </Panel>
+          )}
         </div>
       </div>
 
       <Panel title="Model vs market, per outcome" sub="Outcome order H · D · A">
-        <Outcomes rows={r.per_outcome} decision={r.decision} teams={{ home: m.home_team, away: m.away_team }} />
+        <Outcomes rows={r.per_outcome} decision={r.decision} teams={{ home: m.home_team, away: m.away_team }} mode={viewMode} />
       </Panel>
 
       {(reveal.data || reveal.error || reveal.loading) && (
@@ -286,7 +292,7 @@ function MatchReplay({ matchId, model, policy, meta }: { matchId: string; model?
           {reveal.loading && <Loading what="closing odds and result" />}
           {reveal.error && <ErrorBox error={reveal.error} />}
           {isExp && <p className="note">CLV and paper P&amp;L below belong to the recorded policy, not the exploratory slider decision.</p>}
-          {reveal.data && <RevealView rv={reveal.data} bet={locked.data.decision.action === "BET"} selection={locked.data.decision.selection} />}
+          {reveal.data && <RevealView rv={reveal.data} bet={locked.data.decision.action === "BET"} selection={locked.data.decision.selection} home={m.home_team} away={m.away_team} />}
         </Panel>
       )}
     </div>
@@ -308,25 +314,31 @@ function Slider(props: { id: string; label: string; hint: string; value: number;
   );
 }
 
-function QuoteCard({ quote, cutoff, valid }: { quote: QuoteView | null; cutoff: string; valid?: boolean | null }) {
+function QuoteCard({ quote, cutoff, valid, viewMode = "advanced" }: { quote: QuoteView | null; cutoff: string; valid?: boolean | null; viewMode?: Mode }) {
   return (
-    <Panel title="Offered quote" sub={quote?.bookmaker === "BEST" ? "Best valid price per outcome; Bet365 remains the probability benchmark" : "Bet365 reference pre-closing quote"}>
+    <Panel title="Bookmaker prices" sub={quote?.bookmaker === "BEST" ? "Best valid price per outcome; Bet365 remains the probability benchmark" : "Bet365 reference pre-closing quote"}>
       {!quote ? <Empty>No reference pre-closing quote.</Empty> : (
         <div style={{ display: "grid", gap: 12 }}>
           <div className="odds3">
             {(["H", "D", "A"] as const).map((o, i) => (
-              <div key={o}><div className="label">{OUTCOME_LABEL[o]}</div><div className="o">{odds(quote.odds[i])}</div><span className="quote-bookmaker">{quote.bookmakers?.[i] ?? quote.bookmaker}</span></div>
+              <div key={o}>
+                <div className="label">{OUTCOME_LABEL[o]}</div>
+                <div className="o">{odds(quote.odds[i])}</div>
+                <span className="quote-bookmaker">{quote.bookmakers?.[i] ?? quote.bookmaker}</span>
+              </div>
             ))}
           </div>
-          <dl className="kv" style={{ fontSize: 13 }}>
-            <dt>Bookmaker</dt><dd>{quote.bookmaker}{valid === false && <span className="chip red" style={{ marginLeft: 8 }}>failed validation</span>}</dd>
-            <dt>Snapshot</dt><dd className="mono">{quote.snapshot}</dd>
-            <dt>Observed</dt><dd className="mono">{when(quote.observed_at_utc)}</dd>
-            <dt>Precision</dt><dd><span className={`chip ${quote.timestamp_precision === "UNKNOWN" ? "red" : quote.timestamp_precision === "EXACT" ? "green" : "amber"}`}>{quote.timestamp_precision}</span></dd>
-            <dt>Source</dt><dd className="mono">{quote.source}</dd>
-            <dt>Quote id</dt><dd className="mono">{quote.quote_id}</dd>
-            <dt>Model cutoff</dt><dd className="mono">{when(cutoff)}</dd>
-          </dl>
+          {viewMode === "advanced" && (
+            <dl className="kv" style={{ fontSize: 13 }}>
+              <dt>Bookmaker</dt><dd>{quote.bookmaker}{valid === false && <span className="chip red" style={{ marginLeft: 8 }}>failed validation</span>}</dd>
+              <dt>Snapshot</dt><dd className="mono">{quote.snapshot}</dd>
+              <dt>Observed</dt><dd className="mono">{when(quote.observed_at_utc)}</dd>
+              <dt>Precision</dt><dd><span className={`chip ${quote.timestamp_precision === "UNKNOWN" ? "red" : quote.timestamp_precision === "EXACT" ? "green" : "amber"}`}>{quote.timestamp_precision}</span></dd>
+              <dt>Source</dt><dd className="mono">{quote.source}</dd>
+              <dt>Quote id</dt><dd className="mono">{quote.quote_id}</dd>
+              <dt>Model cutoff</dt><dd className="mono">{when(cutoff)}</dd>
+            </dl>
+          )}
         </div>
       )}
     </Panel>
@@ -369,14 +381,27 @@ function TopFeatures({ rows }: { rows: ReplayX["top_features"] }) {
   );
 }
 
-function RevealView({ rv, bet, selection }: { rv: RevealX; bet: boolean; selection: string | null }) {
+function RevealView({ rv, bet, selection, home, away }: { rv: RevealX; bet: boolean; selection: string | null; home?: string; away?: string }) {
   const won = bet && selection === rv.result.result;
   return (
     <div className="grid cols-3">
       <div>
-        <div className="label">Result</div>
-        <div style={{ font: "800 italic 44px/1 var(--font-d)" }}>{rv.result.home_goals} – {rv.result.away_goals}</div>
-        <div className="muted">{OUTCOME_LABEL[rv.result.result]} {bet && <span className={`chip ${won ? "green" : "red"}`}>{won ? "bet won" : "bet lost"}</span>}</div>
+        <div className="label">Full-time result</div>
+        <div className="result-score">
+          {home && <span className="result-team">{home}</span>}
+          <span className="result-goals">{rv.result.home_goals}</span>
+          <span className="result-sep">–</span>
+          <span className="result-goals">{rv.result.away_goals}</span>
+          {away && <span className="result-team">{away}</span>}
+        </div>
+        <div className="muted" style={{ marginTop: 6 }}>
+          {OUTCOME_LABEL[rv.result.result]}{" "}
+          {bet && (
+            <span className={`result-verdict ${won ? "won" : "lost"}`}>
+              {won ? "BET WON ✓" : "BET LOST ✗"}
+            </span>
+          )}
+        </div>
       </div>
       <div>
         <div className="label">Closing quote {rv.closing_quote ? `· ${rv.closing_quote.bookmaker}` : ""}</div>

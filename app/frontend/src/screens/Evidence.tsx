@@ -9,7 +9,7 @@ import { Empty, ErrorBox, Loading, Notes, Panel, ScreenHead, Seg } from "../comp
 import { MODEL_LABEL } from "../config";
 import { day, fix, int, isNum, spct, sunits, units } from "../format";
 import { setParams } from "../route";
-import type { EvidenceX } from "../types";
+import type { EvidenceX, Mode } from "../types";
 
 const COLORS: Record<string, string> = {
   market: "#8FA3BF", elo: "#F59E4B", dixon_coles: "#B48CF5", marketnet: "#3DDC97", lgbm: "#3FD0E0",
@@ -19,7 +19,7 @@ const color = (k: string) => COLORS[k] ?? "#EEF3FA";
 const axis = { stroke: "#5B7395", fontSize: 12, fontFamily: "IBM Plex Mono, monospace" };
 const tip = { contentStyle: { background: "#0B1A30", border: "1px solid #2A4468", borderRadius: 6, fontSize: 12 }, labelStyle: { color: "#B8C6DA" } };
 
-export function EvidenceScreen({ meta, params }: { meta: Meta; params: URLSearchParams }) {
+export function EvidenceScreen({ meta, params, mode: viewMode = "advanced" }: { meta: Meta; params: URLSearchParams; mode?: Mode }) {
   const split = params.get("split") ?? "validation";
   const model = params.get("model") ?? "";
   const ev = useApi<EvidenceX>(() => api.evidence(model || undefined, split), [model, split]);
@@ -37,7 +37,7 @@ export function EvidenceScreen({ meta, params }: { meta: Meta; params: URLSearch
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <Seg label="Split" value={split} onChange={(s) => set({ split: s, model: undefined })}
               options={[
-                { value: "calibration", label: "Calibration" },
+                ...(viewMode === "advanced" ? [{ value: "calibration", label: "Calibration" }] : []),
                 { value: "validation", label: "Validation" },
                 { value: "holdout", label: meta.holdout_locked ? "Holdout · locked" : "Holdout", disabled: !meta.holdout_locked,
                   title: meta.holdout_locked ? undefined : "Hidden until holdout_locked.json exists" },
@@ -72,28 +72,34 @@ export function EvidenceScreen({ meta, params }: { meta: Meta; params: URLSearch
             <Panel title="Forecast accuracy" sub="Same matches for every model · lower is better" style={{ flex: "1 1 420px" }}>
               <ForecastTable d={d} />
             </Panel>
-            <Panel title="Calibration" sub="Pooled H/D/A probabilities, 10 bins · dot size = matches in bin" style={{ flex: "1 1 460px" }}>
-              <Calibration key={`${d.split}-${d.model_id}`} d={d} />
-            </Panel>
+            {viewMode === "advanced" && (
+              <Panel title="Calibration" sub="Pooled H/D/A probabilities, 10 bins · dot size = matches in bin" style={{ flex: "1 1 460px" }}>
+                <Calibration key={`${d.split}-${d.model_id}`} d={d} />
+              </Panel>
+            )}
           </div>
-          <Panel title="Paper-betting policies" sub="Naive Bet365 · controlled Bet365 · controlled best valid price">
-            <Policies policies={d.policies} />
+          <Panel title="Paper-betting results" sub="Naive Bet365 · controlled Bet365 · controlled best valid price">
+            <Policies policies={d.policies} viewMode={viewMode} />
           </Panel>
-          <Panel title="Line-shopping comparison" sub="Controlled best price versus controlled Bet365, as supplied by the evaluation artifact">
-            {d.x_line_shopping ? <div className="artifact-comparison"><dl className="kv">
-              {Object.entries(d.x_line_shopping).map(([key, value]) => <div className="comparison-field" key={key}>
-                <dt>{key.replace(/_/g, " ")}</dt><dd className="mono">{value === null || value === undefined ? "n/a" : typeof value === "string" ? value : JSON.stringify(value)}</dd>
-              </div>)}
-            </dl></div> : <Empty>n/a · The paired comparison has not arrived in policy_metrics.json. Forecast metrics above remain available.</Empty>}
-            <p className="dim" style={{ fontSize: 12, marginBottom: 0 }}>best-of-many prices are biased upwards by stale quotes</p>
-          </Panel>
+          {viewMode === "advanced" && (
+            <Panel title="Line-shopping comparison" sub="Controlled best price versus controlled Bet365, as supplied by the evaluation artifact">
+              {d.x_line_shopping ? <div className="artifact-comparison"><dl className="kv">
+                {Object.entries(d.x_line_shopping).map(([key, value]) => <div className="comparison-field" key={key}>
+                  <dt>{key.replace(/_/g, " ")}</dt><dd className="mono">{value === null || value === undefined ? "n/a" : typeof value === "string" ? value : JSON.stringify(value)}</dd>
+                </div>)}
+              </dl></div> : <Empty>n/a · The paired comparison has not arrived in policy_metrics.json. Forecast metrics above remain available.</Empty>}
+              <p className="dim" style={{ fontSize: 12, marginBottom: 0 }}>best-of-many prices are biased upwards by stale quotes</p>
+            </Panel>
+          )}
           <div className="row">
             <Panel title="Equity and drawdown" sub="Settled paper bankroll per batch, 1000 units at the start" style={{ flex: "2 1 620px" }}>
               <Equity d={d} />
             </Panel>
-            <Panel title="Feature importance" sub="What the ML models lean on (Part 2)" style={{ flex: "1 1 360px" }}>
-              <Importance key={`${d.split}-${d.model_id}`} d={d} />
-            </Panel>
+            {viewMode === "advanced" && (
+              <Panel title="Feature importance" sub="What the ML models lean on (Part 2)" style={{ flex: "1 1 360px" }}>
+                <Importance key={`${d.split}-${d.model_id}`} d={d} />
+              </Panel>
+            )}
           </div>
           <Panel title="Limitations" tone="amber">
             <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
@@ -178,21 +184,22 @@ function ci(p: PolicySummary) {
   return `${spct(r[0])} to ${spct(r[1])}`;
 }
 
-function Policies({ policies }: { policies: PolicySummary[] }) {
+function Policies({ policies, viewMode = "advanced" }: { policies: PolicySummary[]; viewMode?: Mode }) {
   if (!policies.length) return <Empty>No policy metrics for this model and split yet (Part 2: policy_metrics.json).</Empty>;
-  const lines: [string, (p: PolicySummary) => string][] = [
-    ["Decisions", (p) => int(p.n_decisions)],
-    ["Bets", (p) => int(p.n_bets)],
-    ["Abstentions", (p) => int(p.n_abstain)],
-    ["Turnover", (p) => units(p.turnover)],
-    ["Profit", (p) => sunits(p.profit)],
-    ["ROI", (p) => spct(p.roi)],
-    ["ROI 95% CI (matchweek bootstrap)", ci],
-    ["Max drawdown", (p) => units(p.max_drawdown)],
-    ["Mean CLV", (p) => spct(p.mean_clv, 2)],
-    ["Sharpe per matchweek", (p) => fix(p.sharpe_per_matchweek, 3)],
-    ["Deflated Sharpe", (p) => fix(p.deflated_sharpe, 3)],
+  const allLines: [string, (p: PolicySummary) => string, boolean][] = [
+    ["Decisions looked at", (p) => int(p.n_decisions), false],
+    ["Bets placed", (p) => int(p.n_bets), false],
+    ["Abstentions", (p) => int(p.n_abstain), true],
+    ["Total staked", (p) => units(p.turnover), false],
+    ["Profit / loss", (p) => sunits(p.profit), false],
+    ["Return on investment", (p) => spct(p.roi), false],
+    ["ROI 95% CI (matchweek bootstrap)", ci, true],
+    ["Biggest drawdown", (p) => units(p.max_drawdown), false],
+    ["Mean CLV", (p) => spct(p.mean_clv, 2), true],
+    ["Sharpe per matchweek", (p) => fix(p.sharpe_per_matchweek, 3), true],
+    ["Deflated Sharpe", (p) => fix(p.deflated_sharpe, 3), true],
   ];
+  const lines = allLines.filter(([, , advancedOnly]) => viewMode === "advanced" || !advancedOnly).map(([k, f]) => [k, f] as [string, (p: PolicySummary) => string]);
   const ordered = [...policies].sort((a, b) => (a.policy_id === "naive" ? -1 : b.policy_id === "naive" ? 1 : 0));
   return (
     <div className="row">
