@@ -5,9 +5,21 @@ import { Gauntlet, buildChecks } from "../components/Gauntlet";
 import { Outcomes } from "../components/Outcomes";
 import { Empty, ErrorBox, Field, Loading, Notes, Panel, ScreenHead, Seg } from "../components/ui";
 import { HOLDOUT_SEASON, LEAGUE_LABEL, MODEL_LABEL, OUTCOME_LABEL, USE_MOCKS } from "../config";
-import { day, fix, odds, pct, sfix, spct, sunits, units, when } from "../format";
+import { day, fix, odds, pct, sfix, spct, sunits, when } from "../format";
 import { setParams } from "../route";
 import type { Mode, Overrides, ReplayPolicy, ReplayX, RevealX } from "../types";
+
+function cleanDecisionText(text: string, viewMode: Mode): string {
+  let out = text
+    .replace(/\bpaper\s+/gi, "")
+    .replace(/\bPaper\s+/g, "")
+    .replace(/\bB365\b/g, "Bet365");
+  if (viewMode === "normal") {
+    // Strip the technical stake tail in Simple mode; it's an analysis tool, not a bet sizer.
+    out = out.replace(/\s*Stake\s+[\d.]+\s*units\.?/i, "");
+  }
+  return out;
+}
 
 export function ReplayScreen({ meta, params, mode: viewMode = "advanced" }: { meta: Meta; params: URLSearchParams; mode?: Mode }) {
   const mode = params.get("mode") === "scenarios" ? "scenarios" : "match";
@@ -190,43 +202,43 @@ function MatchReplay({ matchId, model, policy, onPolicyChange, meta, viewMode = 
         <Panel tone={bet ? "green" : "red"} className={isExp ? "is-exp" : ""}>
           <div className="verdict">
             <div>
-              <div className="label">Decision {r.x_decision_source === "ledger" ? "· from the decisions ledger" : r.x_decision_source === "live" ? "· computed live (no ledger row)" : "· example payload"}</div>
+              <div className="label">Model call{viewMode === "advanced" && r.x_decision_source === "ledger" ? " · from ledger" : viewMode === "advanced" && r.x_decision_source === "live" ? " · computed live" : ""}</div>
               <h2 className={`verdict-word ${bet ? "bet" : "nobet"}`}>
-                {bet ? `Paper bet · ${OUTCOME_LABEL[r.decision.selection!]}` : "No bet"}
+                {bet ? `Back ${OUTCOME_LABEL[r.decision.selection!]}` : "No value"}
               </h2>
             </div>
-            <div className="stake">
-              <div className="label">Paper stake</div>
-              <div className="v">{units(r.decision.stake)}</div>
+          </div>
+          <p className="explanation">{cleanDecisionText(r.decision.explanation, viewMode)}</p>
+          {viewMode === "advanced" && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+              {r.decision.reason_codes_all.map((c) => (
+                <span key={c} className={`chip ${c === "ACCEPTED" ? "green" : c === r.decision.reason_code ? "red" : "amber"}`}>{c}</span>
+              ))}
             </div>
-          </div>
-          <p className="explanation">{r.decision.explanation}</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-            {r.decision.reason_codes_all.map((c) => (
-              <span key={c} className={`chip ${c === "ACCEPTED" ? "green" : c === r.decision.reason_code ? "red" : "amber"}`}>{c}</span>
-            ))}
-          </div>
+          )}
           <div style={{ marginTop: 16 }} className="scroll-x">
             <Gauntlet checks={checks} bet={bet} animKey={animKey} />
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 14 }}>
             <button type="button" className="btn solid" onClick={doReveal} disabled={reveal.loading || !!reveal.data || pending}>
-              {reveal.data ? "Revealed below" : "Reveal closing odds & result"}
+              {reveal.data ? "Revealed below" : "Reveal the result"}
             </button>
-            <button type="button" className="btn" onClick={doExplain} disabled={!meta.gemini_enabled || explain.loading || pending || !!explore.error}
-              title={meta.gemini_enabled ? "Rephrase this decision record with Gemini" : "Gemini is not configured"}>
-              {meta.gemini_enabled ? (explain.loading ? "Asking Gemini…" : "Explain in plain English") : "Explain · Gemini off"}
-            </button>
+            {viewMode === "advanced" && (
+              <button type="button" className="btn" onClick={doExplain} disabled={!meta.gemini_enabled || explain.loading || pending || !!explore.error}
+                title={meta.gemini_enabled ? "Rephrase this decision with Gemini" : "Gemini is not configured"}>
+                {meta.gemini_enabled ? (explain.loading ? "Asking Gemini…" : "Explain in plain English") : "Explain · Gemini off"}
+              </button>
+            )}
           </div>
           {explain.error && <div style={{ marginTop: 10 }}><ErrorBox error={explain.error} /></div>}
           {explain.data && (
             <div className={`note ${explain.data.available ? "" : "amber"}`} style={{ marginTop: 10 }}>
               {explain.data.available
-                ? <><b>Gemini rephrase of this decision record</b> (adds no numbers or news): {explain.data.text}</>
+                ? <><b>Gemini rephrase</b>: {explain.data.text}</>
                 : <>Gemini unavailable: {explain.data.reason}</>}
             </div>
           )}
-          <div style={{ marginTop: 10 }}><Notes notes={r.x_notes} /></div>
+          {viewMode === "advanced" && <div style={{ marginTop: 10 }}><Notes notes={r.x_notes} /></div>}
         </Panel>
 
         <div className="grid grid-tight" style={{ alignContent: "start" }}>
@@ -269,7 +281,7 @@ function MatchReplay({ matchId, model, policy, onPolicyChange, meta, viewMode = 
         <Panel title="Revealed after the decision" sub="Closing odds and the result were never inputs to the decision" tone="amber">
           {reveal.loading && <Loading what="closing odds and result" />}
           {reveal.error && <ErrorBox error={reveal.error} />}
-          {isExp && <p className="note">CLV and paper P&amp;L below belong to the recorded policy, not the exploratory slider decision.</p>}
+          {isExp && <p className="note">CLV and P&amp;L below belong to the recorded policy, not the exploratory slider decision.</p>}
           {reveal.data && <RevealView rv={reveal.data} bet={locked.data.decision.action === "BET"} selection={locked.data.decision.selection} home={m.home_team} away={m.away_team} viewMode={viewMode} />}
         </Panel>
       )}
@@ -463,12 +475,11 @@ function ScenarioView({ id, onPick }: { id: string; onPick: (id: string) => void
       <Panel tone={bet ? "green" : "red"}>
         <div className="verdict">
           <div>
-            <div className="label">Decision · constructed inputs</div>
-            <h2 className={`verdict-word ${bet ? "bet" : "nobet"}`}>{bet ? `Paper bet · ${OUTCOME_LABEL[s.decision.selection!]}` : "No bet"}</h2>
+            <div className="label">Model call · constructed inputs</div>
+            <h2 className={`verdict-word ${bet ? "bet" : "nobet"}`}>{bet ? `Back ${OUTCOME_LABEL[s.decision.selection!]}` : "No value"}</h2>
           </div>
-          <div className="stake"><div className="label">Paper stake</div><div className="v">{units(s.decision.stake)}</div></div>
         </div>
-        <p className="explanation">{s.decision.explanation}</p>
+        <p className="explanation">{cleanDecisionText(s.decision.explanation, "advanced")}</p>
         <div style={{ marginTop: 16 }} className="scroll-x"><Gauntlet checks={checks} bet={bet} animKey={s.id} /></div>
       </Panel>
       <Panel title="Per outcome">

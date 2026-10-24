@@ -95,7 +95,7 @@ export function Gauntlet({ checks, bet, animKey }: { checks: Check[]; bet: boole
   return (
     <div>
       <div className="gauntlet" role="img"
-        aria-label={`Decision checks: ${checks.map((c) => `${c.label} ${c.status}`).join(", ")}. ${bet ? "Paper bet placed." : "No bet."}`}>
+        aria-label={`Decision checks: ${checks.map((c) => `${c.label} ${c.status}`).join(", ")}. ${bet ? "Bet placed." : "No bet."}`}>
         <div className="track" />
         <div className="trail" style={{ width: go ? `${target - 3}%` : 0, transition: go ? `width ${dur}ms linear` : "none" }} />
         <div className={`goal ${scored ? "scored" : ""}`} />

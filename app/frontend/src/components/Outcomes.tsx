@@ -41,7 +41,7 @@ export function Outcomes({ rows, decision, teams, mode = "advanced" }: {
               <th>Bookmaker</th>
               <th className="n">Adjusted</th>
               {mode === "advanced" && <th className="n">EV raw</th>}
-              <th className="n">EV stressed</th>
+              {mode === "advanced" && <th className="n">EV stressed</th>}
             </tr>
           </thead>
           <tbody>
@@ -50,8 +50,8 @@ export function Outcomes({ rows, decision, teams, mode = "advanced" }: {
                 <td style={{ fontWeight: 600 }}>
                   {name(r.outcome)}
                   {best?.outcome === r.outcome && (
-                    <span className={`chip ${decision.selection ? "green" : "cyan"}`} style={{ marginLeft: 8 }}>
-                      {decision.selection ? "selected" : "best EV"}
+                    <span className={`chip ${decision.selection ? "green" : ""}`} style={{ marginLeft: 8 }}>
+                      {decision.selection ? "pick" : "best EV"}
                     </span>
                   )}
                 </td>
@@ -62,14 +62,14 @@ export function Outcomes({ rows, decision, teams, mode = "advanced" }: {
                     {mode === "advanced" && <Bar v={r.p_stressed} kind="stressed" />}
                   </div>
                 </td>
-                <td className="n" style={{ color: "var(--cyan)" }}>{pct(r.p_model)}</td>
+                <td className="n" style={{ color: "var(--lime)", fontWeight: 600 }}>{pct(r.p_model)}</td>
                 <td className="n">{pct(r.q_market)}</td>
                 {mode === "advanced" && <td className="n">{pct(r.p_stressed)}</td>}
                 <td className="n">{odds(r.odds_offered)}</td>
                 <td className="mono">{r.bookmaker ?? "n/a"}</td>
                 <td className="n">{odds(r.odds_adjusted)}</td>
-                {mode === "advanced" && <td className="n" style={{ color: r.ev_raw >= 0 ? "var(--green)" : "#ff9aa6" }}>{spct(r.ev_raw)}</td>}
-                <td className="n" style={{ color: r.ev_stressed >= 0 ? "var(--green)" : "#ff9aa6" }}>{spct(r.ev_stressed)}</td>
+                {mode === "advanced" && <td className="n" style={{ color: r.ev_raw >= 0 ? "var(--green)" : "var(--red)" }}>{spct(r.ev_raw)}</td>}
+                {mode === "advanced" && <td className="n" style={{ color: r.ev_stressed >= 0 ? "var(--green)" : "var(--red)" }}>{spct(r.ev_stressed)}</td>}
               </tr>
             ))}
           </tbody>

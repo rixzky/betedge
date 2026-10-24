@@ -78,7 +78,7 @@ export function EvidenceScreen({ meta, params, mode: viewMode = "advanced" }: { 
               </Panel>
             )}
           </div>
-          <Panel title="Paper-betting results" sub="Naive Bet365 · controlled Bet365 · controlled best valid price">
+          <Panel title="Betting results" sub="Naive Bet365 · controlled Bet365 · controlled best valid price">
             <Policies policies={d.policies} viewMode={viewMode} />
           </Panel>
           {viewMode === "advanced" && (
@@ -92,7 +92,7 @@ export function EvidenceScreen({ meta, params, mode: viewMode = "advanced" }: { 
             </Panel>
           )}
           <div className="row">
-            <Panel title="Equity and drawdown" sub="Settled paper bankroll per batch, 1000 units at the start" style={{ flex: "2 1 620px" }}>
+            <Panel title="Equity and drawdown" sub="Settled bankroll per batch, 1000 units at the start" style={{ flex: "2 1 620px" }}>
               <Equity d={d} />
             </Panel>
             {viewMode === "advanced" && (

@@ -87,7 +87,7 @@ export function BetsScreen({ meta, params, mode }: { meta: Meta; params: URLSear
   );
 }
 
-function BetRow({ bet: b, leagueName, mode }: { bet: BetSummary; leagueName: string; mode: Mode }) {
+function BetRow({ bet: b, leagueName, mode: _mode }: { bet: BetSummary; leagueName: string; mode: Mode }) {
   const teams: Record<"H" | "D" | "A", string> = { H: b.home_team, D: "Draw", A: b.away_team };
   const pick = teams[b.selection];
   const edgePP = b.model_p !== null && b.market_q !== null ? (b.model_p - b.market_q) * 100 : 0;
@@ -109,24 +109,14 @@ function BetRow({ bet: b, leagueName, mode }: { bet: BetSummary; leagueName: str
       </div>
 
       <div className="bet-row-pick">
-        <div className="bet-row-label">{mode === "normal" ? "Back" : "Pick"}</div>
-        <div className="bet-row-pick-name">{pick}</div>
-        <div className="bet-row-outcome">{OUTCOME_LABEL[b.selection]}</div>
-      </div>
-
-      <div className="bet-row-probs">
-        <div><span className="bet-row-plabel">Model</span><span className="mono">{pct(b.model_p)}</span></div>
-        <div><span className="bet-row-plabel">Bookie</span><span className="mono">{pct(b.market_q)}</span></div>
+        <div className="bet-row-pick-name">Back {pick}</div>
+        <div className="bet-row-pick-sub">at <b className="mono">{oddsFmt(b.odds_offered)}</b> · {bookmakerName}</div>
+        <div className="bet-row-pick-sub dim">{pct(b.model_p)} model vs {pct(b.market_q)} bookie</div>
       </div>
 
       <div className={`bet-row-edge ${edgePP > 0 ? "positive" : "negative"}`}>
         <div className="bet-row-edge-value">{edgePP >= 0 ? "+" : ""}{edgePP.toFixed(1)}%</div>
         <div className="bet-row-edge-label">Edge</div>
-      </div>
-
-      <div className="bet-row-odds">
-        <div className="bet-row-odds-value mono">{oddsFmt(b.odds_offered)}</div>
-        <div className="bet-row-odds-label">{bookmakerName}</div>
       </div>
 
       <div className="bet-row-arrow" aria-hidden="true">→</div>
