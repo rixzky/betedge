@@ -5,7 +5,6 @@ import { go } from "../route";
 import type { Mode } from "../types";
 
 export function HomeScreen({
-  meta,
   researchOpen,
   activeDest,
   onOpen,
@@ -26,7 +25,9 @@ export function HomeScreen({
             <em>Beat the market.</em>
           </h1>
           <p className="masthead-lede">
-            Our model spots where bookmakers have mispriced the odds.
+            {mode === "normal"
+              ? "Spot the matches where the bookmaker got the odds wrong."
+              : "Pre-closing fair-value model: edges, calibration, and policy returns."}
           </p>
           <button
             type="button"
@@ -35,18 +36,8 @@ export function HomeScreen({
           >
             See best bets ↗
           </button>
-          {mode === "advanced" && (
-            <div className="masthead-links">
-              <a href="#/evidence">The Evidence →</a>
-              <a href="#/map">Market Trends →</a>
-            </div>
-          )}
         </header>
-        <Pitch
-          researchOpen={researchOpen}
-          onOpen={onOpen}
-          activeDest={activeDest}
-        />
+        <Pitch researchOpen={researchOpen} onOpen={onOpen} activeDest={activeDest} />
       </section>
     </div>
   );

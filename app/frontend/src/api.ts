@@ -114,12 +114,18 @@ export function useApi<T>(fn: () => Promise<T>, deps: unknown[]) {
   const seq = useRef(0);
   useEffect(() => {
     const id = ++seq.current;
-    setState({ data: null, loading: true, error: null });
+    // Keep previous data visible while fetching the next payload — avoids a flicker
+    // when swapping policies, leagues or seasons.
+    setState((prev) => ({ data: prev.data, loading: true, error: null }));
     fn().then(
       (data) => id === seq.current && setState({ data, error: null, loading: false }),
       (err: unknown) =>
         id === seq.current &&
-        setState({ data: null, error: err instanceof Error ? err.message : String(err), loading: false }),
+        setState((prev) => ({
+          data: prev.data,
+          error: err instanceof Error ? err.message : String(err),
+          loading: false,
+        })),
     );
     return () => { ++seq.current; };
     // eslint-disable-next-line react-hooks/exhaustive-deps

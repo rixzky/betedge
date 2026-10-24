@@ -9,15 +9,17 @@ import type { Mode } from "../types";
 
 export function BetsScreen({ meta, params, mode }: { meta: Meta; params: URLSearchParams; mode: Mode }) {
   const seasons = meta.seasons.filter((s) => meta.holdout_locked || s !== HOLDOUT_SEASON);
-  const [league, setLeague] = useState(
-    () => params.get("league") ?? (meta.leagues.includes("E0") ? "E0" : meta.leagues[0]) ?? "",
-  );
+  // Default: all leagues (empty string). The user can filter in via the dropdown.
+  const [league, setLeague] = useState(() => params.get("league") ?? "");
   const [season, setSeason] = useState(
     () => params.get("season") ?? (seasons.includes("2024-25") ? "2024-25" : seasons[seasons.length - 1]) ?? "",
   );
   const [q, setQ] = useState("");
 
-  const bets = useApi<BetSummary[]>(() => api.bets(league, season), [league, season]);
+  const bets = useApi<BetSummary[]>(() => api.bets(league || undefined, season), [league, season]);
+
+  const edgeOf = (b: BetSummary) =>
+    b.model_p !== null && b.market_q !== null ? b.model_p - b.market_q : -Infinity;
 
   const list = useMemo(() => {
     const all = bets.data ?? [];
@@ -26,8 +28,8 @@ export function BetsScreen({ meta, params, mode }: { meta: Meta; params: URLSear
       ? all.filter((b) => `${b.home_team} ${b.away_team}`.toLowerCase().includes(needle))
       : all;
     return [...filtered].sort((a, b) => {
-      const ea = a.ev_stressed ?? -Infinity;
-      const eb = b.ev_stressed ?? -Infinity;
+      const ea = edgeOf(a);
+      const eb = edgeOf(b);
       if (eb !== ea) return eb - ea;
       return a.kickoff_utc.localeCompare(b.kickoff_utc);
     });
@@ -53,6 +55,7 @@ export function BetsScreen({ meta, params, mode }: { meta: Meta; params: URLSear
       <div className="bets-toolbar">
         <Field label="League" htmlFor="bt-league">
           <select id="bt-league" value={league} onChange={(e) => setLeague(e.target.value)}>
+            <option value="">All leagues</option>
             {meta.leagues.map((l) => (
               <option key={l} value={l}>{LEAGUE_LABEL[l] ?? l}</option>
             ))}
@@ -117,7 +120,7 @@ function BetRow({ bet: b, leagueName, mode }: { bet: BetSummary; leagueName: str
       </div>
 
       <div className={`bet-row-edge ${edgePP > 0 ? "positive" : "negative"}`}>
-        <div className="bet-row-edge-value">{edgePP >= 0 ? "+" : ""}{edgePP.toFixed(1)}pp</div>
+        <div className="bet-row-edge-value">{edgePP >= 0 ? "+" : ""}{edgePP.toFixed(1)}%</div>
         <div className="bet-row-edge-label">Edge</div>
       </div>
 

@@ -23,32 +23,25 @@ export function ReplayScreen({ meta, params, mode: viewMode = "advanced" }: { me
   return (
     <div className="screen">
       <ScreenHead
-        kicker="02 · Match replay"
-        title={mode === "match" ? "Would we have bet?" : "Demonstration scenarios"}
+        kicker="Match replay"
+        title={mode === "match" ? (viewMode === "normal" ? "Would we have bet?" : "Replay the decision") : "Demonstration scenarios"}
         lede={mode === "match"
           ? (viewMode === "normal"
             ? "Pick a match and see our forecast — did the bookmaker get the odds wrong?"
-            : "Replay one fixture as of the pre-closing quote: our probability against the market's, the price we would actually get, and every check between a forecast and a paper bet.")
-          : "Three constructed inputs that show how the rules behave. They are not historical findings."}
+            : "Replay one fixture at the pre-closing quote: our probability against the market, the price we would get, and every policy gate.")
+          : "Three constructed scenarios that show how the policy gates behave."}
         right={viewMode === "advanced" ? (
           <Seg label="Replay mode" value={mode} onChange={(m) => update({ mode: m })}
             options={[{ value: "match", label: "Historical match" }, { value: "scenarios", label: "Demo scenarios" }]} />
         ) : undefined}
         tone={mode === "scenarios" ? "amber" : undefined}
       />
-      {mode === "match" && <div className="price-toolbar">
-        <div><span className="label">Execution prices</span><p className="dim">The probability benchmark stays Bet365 under both policies.</p></div>
-        <Seg label="Execution price source" value={policy} onChange={(p) => update({ policy: p })} options={[
-          { value: "controlled", label: "Bet365" },
-          { value: "controlled_best_price", label: "Best valid price", disabled: USE_MOCKS,
-            title: USE_MOCKS ? "The static mock contains the Bet365 example only. Run the API to compare prices." : undefined },
-        ]} />
-      </div>}
       {mode === "match" ? (
         <div className="replay-layout">
           <MatchPicker meta={meta} seasons={seasons} league={league} season={season} matchId={matchId}
             model={model} onChange={update} />
-          {matchId ? <MatchReplay key={matchId + model + policy} matchId={matchId} model={model || undefined} policy={policy} meta={meta} viewMode={viewMode} />
+          {matchId ? <MatchReplay key={matchId + (model ?? "")} matchId={matchId} model={model || undefined} policy={policy}
+            onPolicyChange={(p) => update({ policy: p })} meta={meta} viewMode={viewMode} />
             : <Empty>Pick a fixture on the left.</Empty>}
         </div>
       ) : (
@@ -64,25 +57,22 @@ function MatchPicker(props: {
 }) {
   const { meta, league, season, matchId } = props;
   const fx = useApi<Fixture[]>(() => api.fixtures(league, season), [league, season]);
-  const [q, setQ] = useState("");
-  const list = useMemo(() => {
-    const all = fx.data ?? [];
-    const needle = q.trim().toLowerCase();
-    return needle ? all.filter((f) => `${f.home_team} ${f.away_team}`.toLowerCase().includes(needle)) : all;
-  }, [fx.data, q]);
+  const list = fx.data ?? [];
 
   // Default to the first fixture once the list arrives.
   useEffect(() => {
-    if (!matchId && fx.data && fx.data.length) props.onChange({ match: fx.data[0].match_id });
+    if (!matchId && list.length) props.onChange({ match: list[0].match_id });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fx.data, matchId]);
+  }, [list, matchId]);
+
+  const labelFor = (f: Fixture) => `${f.home_team} v ${f.away_team} · ${day(f.kickoff_utc)}`;
 
   return (
-    <Panel title="Fixture" sub={USE_MOCKS ? "Mock mode: every fixture opens the same example replay." : undefined}>
+    <Panel title="Fixture">
       <div style={{ display: "grid", gap: 10 }}>
         <Field label="League" htmlFor="rp-league">
           <select id="rp-league" value={league} onChange={(e) => props.onChange({ league: e.target.value, match: undefined })}>
-            {meta.leagues.map((l) => <option key={l} value={l}>{LEAGUE_LABEL[l] ? `${l} · ${LEAGUE_LABEL[l]}` : l}</option>)}
+            {meta.leagues.map((l) => <option key={l} value={l}>{LEAGUE_LABEL[l] ?? l}</option>)}
           </select>
         </Field>
         <Field label="Season" htmlFor="rp-season">
@@ -90,37 +80,21 @@ function MatchPicker(props: {
             {props.seasons.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </Field>
-        <Field label="Model" htmlFor="rp-model">
-          <select id="rp-model" value={props.model} onChange={(e) => props.onChange({ model: e.target.value || undefined })}>
-            <option value="">Default model</option>
-            {meta.models.map((m) => <option key={m} value={m}>{MODEL_LABEL[m] ?? m}</option>)}
+        <Field label="Match" htmlFor="rp-match">
+          <select id="rp-match" value={matchId} onChange={(e) => props.onChange({ match: e.target.value })}>
+            {!list.length && <option value="">—</option>}
+            {list.map((f) => <option key={f.match_id} value={f.match_id}>{labelFor(f)}</option>)}
           </select>
-        </Field>
-        <Field label="Find a team" htmlFor="rp-search">
-          <input id="rp-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Team name" />
         </Field>
         {fx.error && <ErrorBox error={fx.error} />}
         {fx.loading && !fx.data && <Loading what="fixtures" />}
-        {fx.data && (
-          <div className="fixtures" role="list" aria-label="Fixtures">
-            {list.length === 0 && <Empty>No fixtures for this league and season.</Empty>}
-            {list.map((f) => (
-              <button key={f.match_id} role="listitem" type="button" className="fixture"
-                aria-pressed={f.match_id === matchId} onClick={() => props.onChange({ match: f.match_id })}>
-                <span className="teams">{f.home_team} <span className="dim">v</span> {f.away_team}</span>
-                <span className="chip" style={{ alignSelf: "start" }}>{f.split ?? "n/a"}</span>
-                <span className="meta">{day(f.kickoff_utc)}</span>
-                <span className="meta">{f.has_closing ? "closing ✓" : "no closing"}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        {fx.data && list.length === 0 && <Empty>No fixtures.</Empty>}
       </div>
     </Panel>
   );
 }
 
-function MatchReplay({ matchId, model, policy, meta, viewMode = "advanced" }: { matchId: string; model?: string; policy: ReplayPolicy; meta: Meta; viewMode?: Mode }) {
+function MatchReplay({ matchId, model, policy, onPolicyChange, meta, viewMode = "advanced" }: { matchId: string; model?: string; policy: ReplayPolicy; onPolicyChange: (p: ReplayPolicy) => void; meta: Meta; viewMode?: Mode }) {
   const locked = useApi<ReplayX>(() => api.replay(matchId, model, undefined, policy), [matchId, model, policy]);
   const [sl, setSl] = useState<Required<Overrides> | null>(null);
   const [overrides, setOverrides] = useState<Overrides | null>(null);
@@ -132,6 +106,9 @@ function MatchReplay({ matchId, model, policy, meta, viewMode = "advanced" }: { 
   const [explain, setExplain] = useState<{ data?: Explain; error?: string; loading?: boolean }>({});
   const explainRequest = useRef(0);
   useEffect(() => { ++explainRequest.current; setExplain({}); }, [JSON.stringify(sl)]);
+  // Clear the revealed result when the user switches policy — closing odds / P&L are
+  // policy-specific, so the previous reveal would be stale under the new price source.
+  useEffect(() => { setReveal({}); }, [policy]);
 
   // initialise the sliders from the locked policy
   useEffect(() => {
@@ -252,8 +229,9 @@ function MatchReplay({ matchId, model, policy, meta, viewMode = "advanced" }: { 
           <div style={{ marginTop: 10 }}><Notes notes={r.x_notes} /></div>
         </Panel>
 
-        <div className="grid" style={{ alignContent: "start" }}>
-          <QuoteCard quote={r.offered_quote} cutoff={r.information_cutoff_utc} valid={r.x_quote_is_valid} viewMode={viewMode} />
+        <div className="grid grid-tight" style={{ alignContent: "start" }}>
+          <QuoteCard quote={r.offered_quote} cutoff={r.information_cutoff_utc} valid={r.x_quote_is_valid}
+            policy={policy} onPolicyChange={onPolicyChange} viewMode={viewMode} />
           {viewMode === "advanced" && (
             <Panel title="Stress the edge" sub="Exploratory what-ifs through the shared decision function" tone="amber">
               {USE_MOCKS ? (
@@ -292,7 +270,7 @@ function MatchReplay({ matchId, model, policy, meta, viewMode = "advanced" }: { 
           {reveal.loading && <Loading what="closing odds and result" />}
           {reveal.error && <ErrorBox error={reveal.error} />}
           {isExp && <p className="note">CLV and paper P&amp;L below belong to the recorded policy, not the exploratory slider decision.</p>}
-          {reveal.data && <RevealView rv={reveal.data} bet={locked.data.decision.action === "BET"} selection={locked.data.decision.selection} home={m.home_team} away={m.away_team} />}
+          {reveal.data && <RevealView rv={reveal.data} bet={locked.data.decision.action === "BET"} selection={locked.data.decision.selection} home={m.home_team} away={m.away_team} viewMode={viewMode} />}
         </Panel>
       )}
     </div>
@@ -314,23 +292,52 @@ function Slider(props: { id: string; label: string; hint: string; value: number;
   );
 }
 
-function QuoteCard({ quote, cutoff, valid, viewMode = "advanced" }: { quote: QuoteView | null; cutoff: string; valid?: boolean | null; viewMode?: Mode }) {
+const prettyBookmaker = (code?: string | null) => {
+  if (!code) return "n/a";
+  const map: Record<string, string> = { B365: "Bet365", PS: "Pinnacle", BW: "Betway", IW: "Interwetten",
+    WH: "William Hill", VC: "VC Bet", MAX: "Max", AVG: "Average", BEST: "Best valid" };
+  return map[code] ?? code;
+};
+
+function QuoteCard({ quote, cutoff, valid, policy, onPolicyChange, viewMode = "advanced" }: {
+  quote: QuoteView | null; cutoff: string; valid?: boolean | null;
+  policy: ReplayPolicy; onPolicyChange: (p: ReplayPolicy) => void; viewMode?: Mode;
+}) {
+  const isBest = policy === "controlled_best_price";
   return (
-    <Panel title="Bookmaker prices" sub={quote?.bookmaker === "BEST" ? "Best valid price per outcome; Bet365 remains the probability benchmark" : "Bet365 reference pre-closing quote"}>
+    <Panel title="Offered quote" sub={viewMode === "normal"
+      ? (isBest ? "Best valid price across bookmakers" : "Reference pre-closing quote")
+      : (quote?.bookmaker === "BEST" ? "Best valid price per outcome; Bet365 remains the probability benchmark" : "Bet365 reference pre-closing quote")
+    }>
       {!quote ? <Empty>No reference pre-closing quote.</Empty> : (
-        <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "grid", gap: 14 }}>
+          <div className="price-toggle" role="group" aria-label="Price source">
+            <span className="price-toggle-indicator" data-at={isBest ? "best" : "ref"} aria-hidden="true" />
+            <button type="button" aria-pressed={!isBest} onClick={() => onPolicyChange("controlled")}>
+              Bet365
+            </button>
+            <button type="button" aria-pressed={isBest}
+              disabled={USE_MOCKS}
+              title={USE_MOCKS ? "Mock mode uses the Bet365 example only" : undefined}
+              onClick={() => onPolicyChange("controlled_best_price")}>
+              Best valid price
+            </button>
+          </div>
           <div className="odds3">
             {(["H", "D", "A"] as const).map((o, i) => (
               <div key={o}>
                 <div className="label">{OUTCOME_LABEL[o]}</div>
                 <div className="o">{odds(quote.odds[i])}</div>
-                <span className="quote-bookmaker">{quote.bookmakers?.[i] ?? quote.bookmaker}</span>
+                <span className="quote-bookmaker">{prettyBookmaker(quote.bookmakers?.[i] ?? quote.bookmaker)}</span>
               </div>
             ))}
           </div>
+          {viewMode === "normal" && isBest && quote.source && (
+            <p className="dim" style={{ fontSize: 12, margin: 0 }}>Source: {quote.source}</p>
+          )}
           {viewMode === "advanced" && (
             <dl className="kv" style={{ fontSize: 13 }}>
-              <dt>Bookmaker</dt><dd>{quote.bookmaker}{valid === false && <span className="chip red" style={{ marginLeft: 8 }}>failed validation</span>}</dd>
+              <dt>Bookmaker</dt><dd>{prettyBookmaker(quote.bookmaker)}{valid === false && <span className="chip red" style={{ marginLeft: 8 }}>failed validation</span>}</dd>
               <dt>Snapshot</dt><dd className="mono">{quote.snapshot}</dd>
               <dt>Observed</dt><dd className="mono">{when(quote.observed_at_utc)}</dd>
               <dt>Precision</dt><dd><span className={`chip ${quote.timestamp_precision === "UNKNOWN" ? "red" : quote.timestamp_precision === "EXACT" ? "green" : "amber"}`}>{quote.timestamp_precision}</span></dd>
@@ -381,12 +388,14 @@ function TopFeatures({ rows }: { rows: ReplayX["top_features"] }) {
   );
 }
 
-function RevealView({ rv, bet, selection, home, away }: { rv: RevealX; bet: boolean; selection: string | null; home?: string; away?: string }) {
+function RevealView({ rv, bet, selection, home, away, viewMode = "advanced" }: {
+  rv: RevealX; bet: boolean; selection: string | null; home?: string; away?: string; viewMode?: Mode;
+}) {
   const won = bet && selection === rv.result.result;
+  const verdictClass = bet ? (won ? "won" : "lost") : "nobet";
   return (
-    <div className="grid cols-3">
-      <div>
-        <div className="label">Full-time result</div>
+    <div className="reveal-grid">
+      <div className={`result-banner result-${verdictClass}`}>
         <div className="result-score">
           {home && <span className="result-team">{home}</span>}
           <span className="result-goals">{rv.result.home_goals}</span>
@@ -394,30 +403,34 @@ function RevealView({ rv, bet, selection, home, away }: { rv: RevealX; bet: bool
           <span className="result-goals">{rv.result.away_goals}</span>
           {away && <span className="result-team">{away}</span>}
         </div>
-        <div className="muted" style={{ marginTop: 6 }}>
-          {OUTCOME_LABEL[rv.result.result]}{" "}
-          {bet && (
-            <span className={`result-verdict ${won ? "won" : "lost"}`}>
-              {won ? "BET WON ✓" : "BET LOST ✗"}
-            </span>
-          )}
+        <div className="result-outcome">{OUTCOME_LABEL[rv.result.result]}</div>
+        {bet && (
+          <div className={`result-verdict ${verdictClass}`}>
+            <span className="result-verdict-icon" aria-hidden="true">{won ? "✓" : "✗"}</span>
+            <span>{won ? "BET WON" : "BET LOST"}</span>
+          </div>
+        )}
+      </div>
+      <div className="reveal-side grid cols-2">
+        <div>
+          <div className="label">Closing odds {rv.closing_quote ? `· ${prettyBookmaker(rv.closing_quote.bookmaker)}` : ""}</div>
+          {rv.closing_quote ? (
+            <>
+              <div className="mono" style={{ fontSize: 18 }}>{rv.closing_quote.odds.map((o) => odds(o)).join(" · ")}</div>
+              {viewMode === "advanced" && (
+                <div className="dim mono" style={{ fontSize: 12 }}>fair {rv.closing_fair_probs ? rv.closing_fair_probs.map((p) => pct(p)).join(" · ") : "n/a"}</div>
+              )}
+            </>
+          ) : <div className="dim">n/a</div>}
+        </div>
+        <div>
+          <div className="label">{viewMode === "normal" ? "Payout" : "Closing line value · P&L"}</div>
+          <div className="mono" style={{ fontSize: 18 }}>
+            {viewMode === "normal" ? sunits(rv.settled_pnl) : `CLV ${spct(rv.clv)} · ${sunits(rv.settled_pnl)}`}
+          </div>
         </div>
       </div>
-      <div>
-        <div className="label">Closing quote {rv.closing_quote ? `· ${rv.closing_quote.bookmaker}` : ""}</div>
-        {rv.closing_quote ? (
-          <>
-            <div className="mono" style={{ fontSize: 18 }}>{rv.closing_quote.odds.map((o) => odds(o)).join(" · ")}</div>
-            <div className="dim mono" style={{ fontSize: 12 }}>fair {rv.closing_fair_probs ? rv.closing_fair_probs.map((p) => pct(p)).join(" · ") : "n/a"} · {rv.closing_quote.timestamp_precision}</div>
-          </>
-        ) : <div className="dim">n/a</div>}
-      </div>
-      <div>
-        <div className="label">Closing line value · paper P&amp;L</div>
-        <div className="mono" style={{ fontSize: 18 }}>CLV {spct(rv.clv)} · {sunits(rv.settled_pnl)}</div>
-        <div className="dim" style={{ fontSize: 12 }}>CLV = O offered × q close − 1 (same outcome). A benchmark, not proof. One match is not evidence either way.</div>
-      </div>
-      {rv.x_notes && rv.x_notes.length > 0 && <div style={{ gridColumn: "1 / -1" }}><Notes notes={rv.x_notes} /></div>}
+      {rv.x_notes && rv.x_notes.length > 0 && viewMode === "advanced" && <Notes notes={rv.x_notes} />}
     </div>
   );
 }

@@ -333,9 +333,6 @@ export function Pitch({ researchOpen, onOpen, activeDest }: PitchProps) {
               {p.num && <b>{p.num}</b>}{p.text}
             </span>;
           })}
-          <span className="paint paint-c touchline" style={{ left: "50%", top: `${toFraction({ x: L / 2, y: W + 3.1 }, orientation).y * 100}%`, ...(orientation === "portrait" ? { display: "none" } : {}) }}>
-            Find the edge. Beat the market.
-          </span>
         </div>
         {hot && card && (
           <div className={`pitch-card ${card.x > 0.6 ? "to-left" : card.x < 0.4 ? "to-right" : "centred"} ${card.y > 0.55 ? "above" : "below"}`}
@@ -348,12 +345,11 @@ export function Pitch({ researchOpen, onOpen, activeDest }: PitchProps) {
         )}
       </div>
       <div className="pitch-foot">
-        <span className="pitch-foot-instruction">Find the edge. Beat the market.</span>
         <div className="pitch-controls" role="group" aria-label="Pitch controls">
           <button type="button" className="ctl" aria-pressed={!motion} onClick={() => setMotion((m) => !m)}>
-            <span aria-hidden="true">{motion ? "❚❚" : "▶"}</span>{motion ? "Pause play" : "Resume play"}
+            <span aria-hidden="true">{motion ? "❚❚" : "▶"}</span>{motion ? "Pause" : "Play"}
           </button>
-          <button type="button" className="ctl" onClick={doReset}><span aria-hidden="true">↺</span>Reset ball</button>
+          <button type="button" className="ctl" onClick={doReset}><span aria-hidden="true">↺</span>Reset</button>
         </div>
       </div>
     </div>
