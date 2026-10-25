@@ -423,8 +423,8 @@ table.data tr.hl td { background: rgba(63, 208, 224, 0.07); }
 .brand-btn:hover { background: var(--cyan-soft); transform: translateY(-1px); }
 .brand-btn:hover .brand-title { color: var(--lime); }
 .brand-title {
-  font: 900 italic 70px/0.85 var(--font-d);
-  letter-spacing: -0.02em; text-transform: uppercase;
+  font: 700 italic 70px/0.9 "Oswald", "Arial Narrow", sans-serif;
+  letter-spacing: -0.01em; text-transform: uppercase;
   color: var(--text);
   transition: color 0.2s;
 }
