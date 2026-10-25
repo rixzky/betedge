@@ -152,24 +152,7 @@ function MatchReplay({ matchId, model, policy, onPolicyChange, meta, viewMode = 
   };
 
   return (
-    <div className="grid" style={{ alignContent: "start" }}>
-      <Panel>
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "flex-end" }}>
-          <div>
-            <div className="label">{m.league} · {m.season} · <span className="chip">{m.split ?? "n/a"}</span></div>
-            <div style={{ font: "800 italic 34px/1.05 var(--font-d)", textTransform: "uppercase", marginTop: 6 }}>
-              {m.home_team} <span className="dim" style={{ fontWeight: 600 }}>v</span> {m.away_team}
-            </div>
-            <div className="dim" style={{ fontSize: 13, marginTop: 4 }}>Kickoff {when(m.kickoff_utc)}</div>
-          </div>
-          <dl className="kv" style={{ gridTemplateColumns: "auto auto", fontSize: 13 }}>
-            <dt>Information cutoff</dt><dd className="mono">{when(r.information_cutoff_utc)}</dd>
-            <dt>Model</dt><dd className="mono">{r.model ? `${r.model.model_id} · ${r.model.model_version}` : "n/a"}</dd>
-            {viewMode === "advanced" && <><dt>Config hash</dt><dd className="mono">{r.config_hash}</dd></>}
-          </dl>
-        </div>
-      </Panel>
-
+    <div className="grid grid-tight" style={{ alignContent: "start" }}>
       {isExp && (
         <div className="exploratory" role="status">
           <b>EXPLORATORY</b>
@@ -181,8 +164,17 @@ function MatchReplay({ matchId, model, policy, onPolicyChange, meta, viewMode = 
         </div>
       )}
 
+      {/* Row 1: Decision | Offered Quote (equal columns) */}
       <div className="replay-main" aria-busy={pending}>
         <Panel tone={bet ? "green" : "red"} className={isExp ? "is-exp" : ""}>
+          <div className="match-head">
+            <div className="label">{m.league} · {m.season} · <span className="chip">{m.split ?? "n/a"}</span></div>
+            <div className="match-teams">{m.home_team} <span className="dim" style={{ fontWeight: 600 }}>v</span> {m.away_team}</div>
+            <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>
+              Kickoff {when(m.kickoff_utc)}
+              {viewMode === "advanced" && r.model && <> · {r.model.model_id} <span className="mono">{r.model.model_version}</span></>}
+            </div>
+          </div>
           <div className="verdict">
             <div>
               <div className="label">Model call{viewMode === "advanced" && r.x_decision_source === "ledger" ? " · from ledger" : viewMode === "advanced" && r.x_decision_source === "live" ? " · computed live" : ""}</div>
@@ -207,42 +199,44 @@ function MatchReplay({ matchId, model, policy, onPolicyChange, meta, viewMode = 
           {viewMode === "advanced" && <div style={{ marginTop: 10 }}><Notes notes={r.x_notes} /></div>}
         </Panel>
 
-        <div className="grid grid-tight" style={{ alignContent: "start" }}>
-          <QuoteCard quote={r.offered_quote} cutoff={r.information_cutoff_utc} valid={r.x_quote_is_valid}
-            policy={policy} onPolicyChange={onPolicyChange} viewMode={viewMode} />
-          {viewMode === "advanced" && (
-            <Panel title="Stress the edge" sub="Exploratory what-ifs through the shared decision function" tone="amber">
-              {USE_MOCKS ? (
-                <div className="note amber">Sliders need the backend: mock mode cannot rerun the decision function.</div>
-              ) : sl ? (
-                <div style={{ display: "grid", gap: 12 }}>
-                  <Slider id="sl-d" label="Probability stress δ" hint="sensitivity assumption (not a confidence interval)"
-                    value={sl.prob_stress_delta} min={0} max={0.1} step={0.005} fmt={(v) => `${(v * 100).toFixed(1)} pp`}
-                    onChange={(v) => setSl({ ...sl, prob_stress_delta: v })} />
-                  <Slider id="sl-h" label="Price haircut" hint="O′ = 1 + (O − 1)(1 − h): a worse fill than quoted"
-                    value={sl.price_haircut} min={0} max={0.1} step={0.005} fmt={(v) => `${(v * 100).toFixed(1)}%`}
-                    onChange={(v) => setSl({ ...sl, price_haircut: v })} />
-                  <Slider id="sl-m" label="Minimum EV" hint="per unit staked, at the adjusted odds"
-                    value={sl.min_ev} min={0} max={0.1} step={0.005} fmt={(v) => spct(v)}
-                    onChange={(v) => setSl({ ...sl, min_ev: v })} />
-                  {explore.loading && overrides && <Loading what="exploratory decision" />}
-                  {explore.error && <ErrorBox error={explore.error} />}
-                </div>
-              ) : <Loading what="policy" />}
-            </Panel>
-          )}
-          {viewMode === "advanced" && (
-            <Panel title="What drove the model" sub={r.model ? `${MODEL_LABEL[r.model.model_id] ?? r.model.model_id} · per-match contributions` : undefined}>
-              <TopFeatures rows={r.top_features} />
-            </Panel>
-          )}
-        </div>
+        <QuoteCard quote={r.offered_quote} cutoff={r.information_cutoff_utc} valid={r.x_quote_is_valid}
+          policy={policy} onPolicyChange={onPolicyChange} viewMode={viewMode} />
       </div>
 
+      {/* Row 2 (Expert only): Stress sliders | What drove the model */}
+      {viewMode === "advanced" && (
+        <div className="replay-main">
+          <Panel title="Stress the edge" sub="Exploratory what-ifs through the shared decision function" tone="amber">
+            {USE_MOCKS ? (
+              <div className="note amber">Sliders need the backend: mock mode cannot rerun the decision function.</div>
+            ) : sl ? (
+              <div style={{ display: "grid", gap: 12 }}>
+                <Slider id="sl-d" label="Probability stress δ" hint="sensitivity assumption (not a confidence interval)"
+                  value={sl.prob_stress_delta} min={0} max={0.1} step={0.005} fmt={(v) => `${(v * 100).toFixed(1)} pp`}
+                  onChange={(v) => setSl({ ...sl, prob_stress_delta: v })} />
+                <Slider id="sl-h" label="Price haircut" hint="O′ = 1 + (O − 1)(1 − h): a worse fill than quoted"
+                  value={sl.price_haircut} min={0} max={0.1} step={0.005} fmt={(v) => `${(v * 100).toFixed(1)}%`}
+                  onChange={(v) => setSl({ ...sl, price_haircut: v })} />
+                <Slider id="sl-m" label="Minimum EV" hint="per unit staked, at the adjusted odds"
+                  value={sl.min_ev} min={0} max={0.1} step={0.005} fmt={(v) => spct(v)}
+                  onChange={(v) => setSl({ ...sl, min_ev: v })} />
+                {explore.loading && overrides && <Loading what="exploratory decision" />}
+                {explore.error && <ErrorBox error={explore.error} />}
+              </div>
+            ) : <Loading what="policy" />}
+          </Panel>
+          <Panel title="What drove the model" sub={r.model ? `${MODEL_LABEL[r.model.model_id] ?? r.model.model_id} · per-match contributions` : undefined}>
+            <TopFeatures rows={r.top_features} />
+          </Panel>
+        </div>
+      )}
+
+      {/* Row 3: Outcomes full width */}
       <Panel title="Model vs market, per outcome" sub="Outcome order H · D · A">
         <Outcomes rows={r.per_outcome} decision={r.decision} teams={{ home: m.home_team, away: m.away_team }} mode={viewMode} />
       </Panel>
 
+      {/* Row 4: Reveal (full width, conditional) */}
       {(reveal.data || reveal.error || reveal.loading) && (
         <Panel title="Revealed after the decision" sub="Closing odds and the result were never inputs to the decision" tone="amber">
           {reveal.loading && <Loading what="closing odds and result" />}
