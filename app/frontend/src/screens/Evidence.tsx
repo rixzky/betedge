@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
-  Area, AreaChart, CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart,
-  Tooltip, XAxis, YAxis, ZAxis,
+  Area, AreaChart, CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer,
+  Tooltip, XAxis, YAxis,
 } from "recharts";
 import type { Meta, PolicySummary } from "../../../../contract/api_types";
 import { api, useApi } from "../api";
@@ -37,7 +37,6 @@ export function EvidenceScreen({ meta, params, mode: viewMode = "advanced" }: { 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <Seg label="Split" value={split} onChange={(s) => set({ split: s, model: undefined })}
               options={[
-                ...(viewMode === "advanced" ? [{ value: "calibration", label: "Calibration" }] : []),
                 { value: "validation", label: "Validation" },
                 { value: "holdout", label: meta.holdout_locked ? "Holdout · locked" : "Holdout", disabled: !meta.holdout_locked,
                   title: meta.holdout_locked ? undefined : "Hidden until holdout_locked.json exists" },
@@ -68,16 +67,9 @@ export function EvidenceScreen({ meta, params, mode: viewMode = "advanced" }: { 
             </div>
           )}
           <Notes notes={d.x_notes} />
-          <div className="row">
-            <Panel title="Forecast accuracy" sub="Same matches for every model · lower is better" style={{ flex: "1 1 420px" }}>
-              <ForecastTable d={d} />
-            </Panel>
-            {viewMode === "advanced" && (
-              <Panel title="Calibration" sub="Pooled H/D/A probabilities, 10 bins · dot size = matches in bin" style={{ flex: "1 1 460px" }}>
-                <Calibration key={`${d.split}-${d.model_id}`} d={d} />
-              </Panel>
-            )}
-          </div>
+          <Panel title="Forecast accuracy" sub="Same matches for every model · lower is better">
+            <ForecastTable d={d} />
+          </Panel>
           <Panel title="Betting results" sub="Naive Bet365 · controlled Bet365 · controlled best valid price">
             <Policies policies={d.policies} viewMode={viewMode} />
           </Panel>
@@ -135,45 +127,6 @@ function ForecastTable({ d }: { d: EvidenceX }) {
         </tbody>
       </table>
       <p className="dim" style={{ fontSize: 12, margin: "8px 0 0" }}>{d.x_brier_convention ? `Brier convention: ${d.x_brier_convention}.` : null} Sorted by log loss. If no model beats the market here, that is the finding.</p>
-    </div>
-  );
-}
-
-function Calibration({ d }: { d: EvidenceX }) {
-  const models = d.forecast.map((f) => f.model_id);
-  const [on, setOn] = useState<string[]>(() => models.filter((m) => m === "market" || m === d.model_id || models.length <= 3));
-  if (!d.forecast.length) return <Empty>No calibration bins yet.</Empty>;
-  return (
-    <div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-        {models.map((m) => (
-          <button key={m} type="button" className="chip" aria-pressed={on.includes(m)}
-            style={{ cursor: "pointer", borderColor: on.includes(m) ? color(m) : undefined, color: on.includes(m) ? color(m) : undefined }}
-            onClick={() => setOn(on.includes(m) ? on.filter((x) => x !== m) : [...on, m])}>
-            {MODEL_LABEL[m] ?? m}
-          </button>
-        ))}
-      </div>
-      <div style={{ height: 300 }}>
-        <ResponsiveContainer>
-          <ScatterChart margin={{ top: 8, right: 16, bottom: 24, left: 4 }}>
-            <CartesianGrid stroke="#1E3556" />
-            <XAxis type="number" dataKey="mean_pred" domain={[0, 1]} tick={axis} stroke={axis.stroke}
-              tickFormatter={(v) => `${Math.round(v * 100)}%`} label={{ value: "forecast probability", position: "bottom", fill: "#8195B2", fontSize: 12 }} />
-            <YAxis type="number" dataKey="obs_freq" domain={[0, 1]} tick={axis} stroke={axis.stroke}
-              tickFormatter={(v) => `${Math.round(v * 100)}%`} label={{ value: "observed", angle: -90, position: "insideLeft", fill: "#8195B2", fontSize: 12 }} />
-            <ZAxis type="number" dataKey="n" range={[30, 380]} />
-            <ReferenceLine segment={[{ x: 0, y: 0 }, { x: 1, y: 1 }]} stroke="#5B7395" strokeDasharray="5 5" />
-            <Tooltip {...tip} cursor={{ strokeDasharray: "3 3" }}
-              formatter={(v: number, name: string) => (name === "n" ? int(v) : `${(v * 100).toFixed(1)}%`)} />
-            {d.forecast.filter((f) => on.includes(f.model_id)).map((f) => (
-              <Scatter key={f.model_id} name={MODEL_LABEL[f.model_id] ?? f.model_id} data={f.calibration_bins}
-                fill={color(f.model_id)} fillOpacity={0.75} line={{ stroke: color(f.model_id), strokeOpacity: 0.5 }} />
-            ))}
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
-      <p className="dim" style={{ fontSize: 12, margin: 0 }}>Points on the dashed line are perfectly calibrated. Above it: outcomes happened more often than forecast.</p>
     </div>
   );
 }
