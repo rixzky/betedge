@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { Explain, Fixture, Meta, QuoteView, Scenarios } from "../../../../contract/api_types";
+import { useEffect, useMemo, useState } from "react";
+import type { Fixture, Meta, QuoteView, Scenarios } from "../../../../contract/api_types";
 import { api, useApi } from "../api";
-import { Gauntlet, buildChecks } from "../components/Gauntlet";
 import { Outcomes } from "../components/Outcomes";
 import { Empty, ErrorBox, Field, Loading, Notes, Panel, ScreenHead, Seg } from "../components/ui";
 import { HOLDOUT_SEASON, LEAGUE_LABEL, MODEL_LABEL, OUTCOME_LABEL, USE_MOCKS } from "../config";
@@ -115,9 +114,6 @@ function MatchReplay({ matchId, model, policy, onPolicyChange, meta, viewMode = 
     [matchId, model, policy, JSON.stringify(overrides)],
   );
   const [reveal, setReveal] = useState<{ data?: RevealX; error?: string; loading?: boolean }>({});
-  const [explain, setExplain] = useState<{ data?: Explain; error?: string; loading?: boolean }>({});
-  const explainRequest = useRef(0);
-  useEffect(() => { ++explainRequest.current; setExplain({}); }, [JSON.stringify(sl)]);
   // Clear the revealed result when the user switches policy — closing odds / P&L are
   // policy-specific, so the previous reveal would be stale under the new price source.
   useEffect(() => { setReveal({}); }, [policy]);
@@ -149,23 +145,10 @@ function MatchReplay({ matchId, model, policy, onPolicyChange, meta, viewMode = 
   const isExp = changed || r.is_exploratory;
   const m = r.match;
   const bet = r.decision.action === "BET";
-  const checks = buildChecks({
-    decision: r.decision, perOutcome: r.per_outcome, config: r.config_used, quote: r.offered_quote,
-    modelLabel: r.model ? MODEL_LABEL[r.model.model_id] ?? r.model.model_id : null,
-  });
-  const animKey = `${m.match_id}|${r.decision.reason_codes_all.join(",")}|${r.decision.action}|${isExp}`;
 
   const doReveal = () => {
     setReveal({ loading: true });
     api.reveal(matchId, model, policy).then((data) => setReveal({ data }), (e: Error) => setReveal({ error: e.message }));
-  };
-  const doExplain = () => {
-    const request = ++explainRequest.current;
-    setExplain({ loading: true });
-    api.explain(matchId, model, overrides ?? undefined, policy).then(
-      (data) => { if (request === explainRequest.current) setExplain({ data }); },
-      (e: Error) => { if (request === explainRequest.current) setExplain({ error: e.message }); },
-    );
   };
 
   return (
@@ -216,28 +199,11 @@ function MatchReplay({ matchId, model, policy, onPolicyChange, meta, viewMode = 
               ))}
             </div>
           )}
-          <div style={{ marginTop: 16 }} className="scroll-x">
-            <Gauntlet checks={checks} bet={bet} animKey={animKey} />
-          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 14 }}>
             <button type="button" className="btn solid" onClick={doReveal} disabled={reveal.loading || !!reveal.data || pending}>
               {reveal.data ? "Revealed below" : "Reveal the result"}
             </button>
-            {viewMode === "advanced" && (
-              <button type="button" className="btn" onClick={doExplain} disabled={!meta.gemini_enabled || explain.loading || pending || !!explore.error}
-                title={meta.gemini_enabled ? "Rephrase this decision with Gemini" : "Gemini is not configured"}>
-                {meta.gemini_enabled ? (explain.loading ? "Asking Gemini…" : "Explain in plain English") : "Explain · Gemini off"}
-              </button>
-            )}
           </div>
-          {explain.error && <div style={{ marginTop: 10 }}><ErrorBox error={explain.error} /></div>}
-          {explain.data && (
-            <div className={`note ${explain.data.available ? "" : "amber"}`} style={{ marginTop: 10 }}>
-              {explain.data.available
-                ? <><b>Gemini rephrase</b>: {explain.data.text}</>
-                : <>Gemini unavailable: {explain.data.reason}</>}
-            </div>
-          )}
           {viewMode === "advanced" && <div style={{ marginTop: 10 }}><Notes notes={r.x_notes} /></div>}
         </Panel>
 
@@ -455,9 +421,6 @@ function ScenarioView({ id, onPick }: { id: string; onPick: (id: string) => void
   const s = list.find((x) => x.id === id) ?? list[0];
   if (!s) return <Empty>No scenarios.</Empty>;
   const bet = s.decision.action === "BET";
-  const quote: QuoteView = { quote_id: "constructed", bookmaker: "Constructed", snapshot: "PRE_CLOSING", observed_at_utc: null,
-    timestamp_precision: s.timestamp_precision, source: "constructed", odds: s.odds };
-  const checks = buildChecks({ decision: s.decision, perOutcome: s.per_outcome, config: null, quote, modelLabel: "constructed" });
   return (
     <div className="grid">
       <div className="exploratory" style={{ marginBottom: 0 }}><b>CONSTRUCTED</b><span>{sc.data.label}</span></div>
@@ -480,7 +443,6 @@ function ScenarioView({ id, onPick }: { id: string; onPick: (id: string) => void
           </div>
         </div>
         <p className="explanation">{cleanDecisionText(s.decision.explanation, "advanced")}</p>
-        <div style={{ marginTop: 16 }} className="scroll-x"><Gauntlet checks={checks} bet={bet} animKey={s.id} /></div>
       </Panel>
       <Panel title="Per outcome">
         <Outcomes rows={s.per_outcome} decision={s.decision} />

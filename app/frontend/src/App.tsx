@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Meta } from "../../../contract/api_types";
 import { api, useApi } from "./api";
-import { Ball, ErrorBox } from "./components/ui";
+import { ErrorBox } from "./components/ui";
 import { PROJECT_TITLE } from "./config";
 import type { Destination, DestId } from "./pitch/geometry";
 import { ResearchCtx, type ResearchContext } from "./research/context";
@@ -82,7 +82,6 @@ export function App() {
             onClick={() => go("home")}
             aria-label={`${PROJECT_TITLE} — return to pitch`}
           >
-            <Ball size={28} />
             <span className="brand-title">{PROJECT_TITLE}</span>
           </button>
           <ModeToggle mode={mode} onChange={setMode} />

@@ -111,9 +111,9 @@ export function Gauntlet({ checks, bet, animKey }: { checks: Check[]; bet: boole
                 <div className="v">{go && (cls !== "idle" || done) ? c.value : c.status === "off" ? "gate off" : "…"}</div>
               </div>
               <svg className="body" viewBox="0 0 30 46" aria-hidden="true">
-                <circle cx="15" cy="6" r="5" fill="#E8EEF6" />
-                <path d="M6 15 Q15 11 24 15 L22.5 32 L7.5 32 Z" fill="#E8EEF6" />
-                <path d="M9 32 L8.5 45 L13 45 L14.4 34 L15.6 34 L17 45 L21.5 45 L21 32 Z" fill="#C9D5E6" />
+                <circle cx="15" cy="5.5" r="4.5" fill="currentColor" />
+                <path d="M6 15 Q15 10 24 15 Q24 20 22.5 32 L7.5 32 Q6 20 6 15 Z" fill="currentColor" fillOpacity="0.95" />
+                <path d="M9 32 L8.5 45 Q8.5 46 10 46 L12.5 46 Q13.3 46 13.5 45 L14.4 34 L15.6 34 L16.5 45 Q16.7 46 17.5 46 L20 46 Q21.5 46 21.5 45 L21 32 Z" fill="currentColor" fillOpacity="0.72" />
               </svg>
               <span className="badge-n">{cls === "pass" ? "✓" : cls === "blocked" || cls === "failed" ? "✕" : i + 1}</span>
             </div>

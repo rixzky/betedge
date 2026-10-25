@@ -21,8 +21,8 @@ export function HomeScreen({
       <section className="stage">
         <header className="masthead">
           <h1>
-            Find the edge.<br />
-            <em>Beat the market.</em>
+            {mode === "normal" ? "Smart bets," : "Mispricing,"}<br />
+            <em>{mode === "normal" ? "powered by data." : "quantified."}</em>
           </h1>
           <p className="masthead-lede">
             {mode === "normal"
@@ -34,7 +34,7 @@ export function HomeScreen({
             className="btn solid home-cta"
             onClick={() => go("bets")}
           >
-            See best bets ↗
+            {mode === "normal" ? "Find today's bets" : "See best bets"} ↗
           </button>
         </header>
         <Pitch researchOpen={researchOpen} onOpen={onOpen} activeDest={activeDest} />
